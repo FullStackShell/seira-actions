@@ -1,0 +1,95 @@
+name: "Seira Pages"
+description: "Generate documentation from shell scripts with seira and deploy to GitHub Pages"
+author: "FullStackShell"
+
+branding:
+  icon: "book-open"
+  color: "blue"
+
+inputs:
+  entrypoint:
+    description: "Shell script entrypoint (optional if .seirarc.json exists)"
+    required: false
+    default: ""
+  title:
+    description: "Documentation title (default: repository name)"
+    required: false
+    default: ""
+  format:
+    description: "Output format: html or markdown (default: html)"
+    required: false
+    default: "html"
+  seira-version:
+    description: "Seira version to install (Git ref such as branch, tag, or commit SHA). Default: main"
+    required: false
+    default: "main"
+  go-version:
+    description: "Go version to use for building seira"
+    required: false
+    default: "1.25"
+  artifact-name:
+    description: "Name of the Pages artifact"
+    required: false
+    default: "github-pages"
+  retention-days:
+    description: "Artifact retention in days"
+    required: false
+    default: "1"
+
+outputs:
+  artifact-id:
+    description: "The ID of the uploaded Pages artifact"
+    value: ${{ steps.upload.outputs.artifact_id }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: false
+
+    - name: Install seira
+      shell: bash
+      run: |
+        go install "github.com/Hayao0819/seira@${{ inputs.seira-version }}"
+
+    - name: Generate documentation
+      shell: bash
+      run: |
+        OUTPUT_DIR="${RUNNER_TEMP}/seira-pages-output"
+        mkdir -p "${OUTPUT_DIR}"
+
+        ARGS=()
+        if [ -n "${{ inputs.entrypoint }}" ]; then
+          ARGS+=("${{ inputs.entrypoint }}")
+        fi
+
+        ARGS+=("--format" "${{ inputs.format }}")
+
+        if [ -n "${{ inputs.title }}" ]; then
+          ARGS+=("--title" "${{ inputs.title }}")
+        fi
+
+        EXT="html"
+        if [ "${{ inputs.format }}" = "markdown" ] || [ "${{ inputs.format }}" = "md" ]; then
+          EXT="md"
+        fi
+
+        ARGS+=("--output" "${OUTPUT_DIR}/index.${EXT}")
+
+        echo "::group::Running seira doc"
+        echo "seira doc ${ARGS[*]}"
+        seira doc "${ARGS[@]}"
+        echo "::endgroup::"
+
+        echo "output-dir=${OUTPUT_DIR}" >> "${GITHUB_ENV}"
+
+    - name: Upload Pages artifact
+      id: upload
+      uses: actions/upload-pages-artifact@v3
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ env.output-dir }}
+        retention-days: ${{ inputs.retention-days }}
