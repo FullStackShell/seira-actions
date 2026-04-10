@@ -1,0 +1,110 @@
+name: "Seira Build"
+description: "Bundle shell scripts into a standalone executable with seira"
+author: "FullStackShell"
+
+branding:
+  icon: "package"
+  color: "green"
+
+inputs:
+  entrypoint:
+    description: "Shell script entrypoint (optional if .seirarc.json exists)"
+    required: false
+    default: ""
+  output:
+    description: "Output file path"
+    required: false
+    default: "output.sh"
+  mode:
+    description: "Bundle mode: tarball or concat (default: from .seirarc.json or tarball)"
+    required: false
+    default: ""
+  shebang:
+    description: "Shebang line (default: from .seirarc.json or /bin/sh)"
+    required: false
+    default: ""
+  minify:
+    description: "Minify shell scripts (true/false)"
+    required: false
+    default: "false"
+  treeshake:
+    description: "Enable tree shaking to remove unused functions (true/false)"
+    required: false
+    default: "false"
+  strip-comments:
+    description: "Remove comments from bundled output (true/false)"
+    required: false
+    default: "false"
+  type:
+    description: "Project type: executable or library (default: from .seirarc.json or executable)"
+    required: false
+    default: ""
+  seira-version:
+    description: "Seira version to install (Git ref such as branch, tag, or commit SHA). Default: main"
+    required: false
+    default: "main"
+  go-version:
+    description: "Go version to use for building seira"
+    required: false
+    default: "1.25"
+
+outputs:
+  output-path:
+    description: "Path to the bundled output file"
+    value: ${{ steps.build.outputs.output-path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: false
+
+    - name: Install seira
+      shell: bash
+      run: |
+        go install "github.com/Hayao0819/seira@${{ inputs.seira-version }}"
+
+    - name: Build
+      id: build
+      shell: bash
+      run: |
+        ARGS=()
+        if [ -n "${{ inputs.entrypoint }}" ]; then
+          ARGS+=("${{ inputs.entrypoint }}")
+        fi
+
+        ARGS+=("--output" "${{ inputs.output }}")
+
+        if [ -n "${{ inputs.mode }}" ]; then
+          ARGS+=("--mode" "${{ inputs.mode }}")
+        fi
+
+        if [ -n "${{ inputs.shebang }}" ]; then
+          ARGS+=("--shebang" "${{ inputs.shebang }}")
+        fi
+
+        if [ "${{ inputs.minify }}" = "true" ]; then
+          ARGS+=("--minify")
+        fi
+
+        if [ "${{ inputs.treeshake }}" = "true" ]; then
+          ARGS+=("--treeshake")
+        fi
+
+        if [ "${{ inputs.strip-comments }}" = "true" ]; then
+          ARGS+=("--strip-comments")
+        fi
+
+        if [ -n "${{ inputs.type }}" ]; then
+          ARGS+=("--type" "${{ inputs.type }}")
+        fi
+
+        echo "::group::Running seira build"
+        echo "seira build ${ARGS[*]}"
+        seira build "${ARGS[@]}"
+        echo "::endgroup::"
+
+        echo "output-path=${{ inputs.output }}" >> "${GITHUB_OUTPUT}"
